@@ -1,21 +1,35 @@
 'use strict';
 
 const stripe = require('../config/stripe');
-const { createPaymentIntent, handleWebhookEvent } = require('../services/paymentService');
+const { createCheckoutSession, handleWebhookEvent } = require('../services/paymentService');
 
 /**
  * POST /api/payments/create-payment-intent
- * Body: { amount: number (cents), currency: string, metadata?: object }
+ * Body: {
+ *   amount: number,
+ *   currency: string,
+ *   subRaceId: string,
+ *   participant: { fullName: string, email: string, ... },
+ *   successUrl: string,
+ *   cancelUrl: string
+ * }
  */
 async function createIntent(req, res) {
   try {
-    const { amount, currency, metadata } = req.body;
-    const paymentIntent = await createPaymentIntent(amount, currency, metadata);
+    const { amount, currency, subRaceId, participant, successUrl, cancelUrl } = req.body;
+    const session = await createCheckoutSession({
+      amount,
+      currency,
+      subRaceId,
+      participant,
+      successUrl,
+      cancelUrl,
+    });
 
-    res.status(201).json({ clientSecret: paymentIntent.client_secret });
+    res.status(201).json({ checkoutUrl: session.url, sessionId: session.id });
   } catch (err) {
-    console.error('Error creating payment intent:', err.message);
-    res.status(500).json({ error: 'Failed to create payment intent' });
+    console.error('Error creating checkout session:', err.message);
+    res.status(500).json({ error: 'Failed to create checkout session' });
   }
 }
 

@@ -27,7 +27,6 @@ cp .env.example .env
 | `ALLOWED_ORIGINS` | Comma-separated list of allowed frontend origins (e.g. `http://localhost:5173`) |
 | `SUPABASE_URL` | Your Supabase project URL |
 | `SUPABASE_ANON_KEY` | Supabase public anon key |
-| `SUPABASE_SERVICE_ROLE_KEY` | Supabase service-role key (used for admin operations) |
 | `STRIPE_SECRET_KEY` | Stripe secret key (`sk_test_…` or `sk_live_…`) |
 | `STRIPE_WEBHOOK_SECRET` | Stripe webhook signing secret (`whsec_…`) |
 
@@ -76,22 +75,37 @@ Pass the `access_token` as a `Bearer` token in the `Authorization` header for pr
 
 | Method | Path | Auth | Description |
 |---|---|---|---|
-| POST | `/api/payments/create-payment-intent` | Bearer token | Create a Stripe Payment Intent |
+| POST | `/api/payments/create-payment-intent` | Public | Create a Stripe Checkout Session for race registration |
 | POST | `/api/payments/webhook` | Stripe signature | Handle Stripe webhook events |
 
-**Create Payment Intent body:**
+**Create Checkout Session body:**
 ```json
-{ "amount": 1000, "currency": "usd", "metadata": {} }
+{
+  "amount": 1000,
+  "currency": "usd",
+  "subRaceId": "8d0b0b84-c0fd-4796-8ee5-0fa1ec3d494e",
+  "participant": {
+    "fullName": "Jane Doe",
+    "email": "jane@example.com",
+    "dateOfBirth": "1994-08-20",
+    "gender": "female",
+    "teamName": "City Runners",
+    "nationality": "CZ",
+    "phone": "+420123456789"
+  },
+  "successUrl": "https://your-frontend.com/checkout/success",
+  "cancelUrl": "https://your-frontend.com/checkout/cancel"
+}
 ```
 
 `amount` is in the **smallest currency unit** (e.g. cents for USD).
 
 **Response:**
 ```json
-{ "clientSecret": "pi_xxx_secret_xxx" }
+{ "checkoutUrl": "https://checkout.stripe.com/c/pay/cs_xxx", "sessionId": "cs_xxx" }
 ```
 
-Use the `clientSecret` on your frontend with [Stripe.js](https://stripe.com/docs/js) to confirm the payment.
+Redirect the user to `checkoutUrl` so Stripe hosts the payment page.
 
 **Webhook setup:**  
 Point your Stripe webhook to `https://your-domain.com/api/payments/webhook` and set `STRIPE_WEBHOOK_SECRET`.
@@ -100,18 +114,29 @@ Point your Stripe webhook to `https://your-domain.com/api/payments/webhook` and 
 
 ## Supabase Database
 
-When a Payment Intent is created via the API it is saved to a `payment_intents` table (requires `supabaseAdmin`). Create the table in your Supabase project:
+When Stripe confirms payment (`checkout.session.completed`), the backend:
+
+1. finds or creates a record in `participants` using the submitted participant data
+2. creates or updates a paid record in `race_entries` for the selected `subRaceId`
+
+Expected schema fields used by the backend:
 
 ```sql
-create table payment_intents (
-  id               uuid primary key default gen_random_uuid(),
-  stripe_payment_intent_id text unique not null,
-  amount           integer not null,
-  currency         text not null,
-  status           text not null,
-  metadata         jsonb,
-  created_at       timestamptz default now()
-);
+participants.full_name
+participants.date_of_birth
+participants.gender
+participants.team_name
+participants.nationality
+participants.email
+participants.phone
+
+race_entries.sub_race_id
+race_entries.participant_id
+race_entries.is_paid
+race_entries.payment_amount
+race_entries.payment_currency
+race_entries.payment_date
+race_entries.notes
 ```
 
 ---

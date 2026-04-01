@@ -1,49 +1,159 @@
 'use strict';
 
 const stripe = require('../config/stripe');
-const { supabaseAdmin } = require('../config/supabase');
+const { supabase } = require('../config/supabase');
 
-/**
- * Create a Stripe Payment Intent and optionally persist a record to Supabase.
- */
-async function createPaymentIntent(amount, currency, metadata = {}) {
-  const paymentIntent = await stripe.paymentIntents.create({
-    amount,
-    currency,
-    automatic_payment_methods: { enabled: true },
-    metadata,
-  });
+const ZERO_DECIMAL_CURRENCIES = new Set([
+  'bif',
+  'clp',
+  'djf',
+  'gnf',
+  'jpy',
+  'kmf',
+  'krw',
+  'mga',
+  'pyg',
+  'rwf',
+  'ugx',
+  'vnd',
+  'vuv',
+  'xaf',
+  'xof',
+  'xpf',
+]);
 
-  if (supabaseAdmin) {
-    await supabaseAdmin.from('payment_intents').insert({
-      stripe_payment_intent_id: paymentIntent.id,
-      amount,
-      currency,
-      status: paymentIntent.status,
-      metadata,
-    });
+function convertFromSmallestUnit(amount, currency) {
+  const normalizedCurrency = String(currency || '').toLowerCase();
+  if (ZERO_DECIMAL_CURRENCIES.has(normalizedCurrency)) {
+    return amount;
   }
 
-  return paymentIntent;
+  return amount / 100;
+}
+
+async function findOrCreateParticipant(participant) {
+  const email = participant.email || null;
+
+  if (email) {
+    const { data: existingParticipant, error: selectError } = await supabase
+      .from('participants')
+      .select('id, full_name, email')
+      .eq('email', email)
+      .maybeSingle();
+
+    if (selectError) {
+      throw selectError;
+    }
+
+    if (existingParticipant) {
+      return existingParticipant;
+    }
+  }
+
+  const participantRecord = {
+    full_name: participant.fullName,
+    date_of_birth: participant.dateOfBirth || null,
+    gender: participant.gender || null,
+    team_name: participant.teamName || null,
+    nationality: participant.nationality || null,
+    email,
+    phone: participant.phone || null,
+  };
+
+  const { data: createdParticipant, error: insertError } = await supabase
+    .from('participants')
+    .insert(participantRecord)
+    .select('id, full_name, email')
+    .single();
+
+  if (insertError) {
+    throw insertError;
+  }
+
+  return createdParticipant;
+}
+
+/**
+ * Create a Stripe Checkout Session for public race registration.
+ */
+async function createCheckoutSession({ amount, currency, subRaceId, participant, successUrl, cancelUrl }) {
+  const registrationPayload = {
+    subRaceId,
+    participant,
+  };
+
+  const metadata = {
+    sub_race_id: String(subRaceId),
+    participant_email: String(participant.email),
+    registration_payload: JSON.stringify(registrationPayload),
+  };
+
+  const session = await stripe.checkout.sessions.create({
+    mode: 'payment',
+    success_url: successUrl,
+    cancel_url: cancelUrl,
+    customer_email: participant.email,
+    metadata,
+    payment_intent_data: { metadata },
+    line_items: [
+      {
+        quantity: 1,
+        price_data: {
+          currency,
+          unit_amount: amount,
+          product_data: {
+            name: `Race Registration (${subRaceId})`,
+          },
+        },
+      },
+    ],
+  });
+
+  return session;
 }
 
 /**
  * Handle a verified Stripe webhook event and update Supabase records accordingly.
  */
 async function handleWebhookEvent(event) {
-  if (!supabaseAdmin) return;
-
   const { type, data } = event;
 
   switch (type) {
-    case 'payment_intent.succeeded':
+    case 'checkout.session.completed': {
+      const session = data.object;
+
+      if (session.payment_status !== 'paid') break;
+
+      let registrationPayload = {};
+      try {
+        registrationPayload = JSON.parse(session.metadata?.registration_payload || '{}');
+      } catch (_err) {
+        registrationPayload = {};
+      }
+
+      const subRaceId = registrationPayload.subRaceId || session.metadata?.sub_race_id;
+      const participant = registrationPayload.participant || {
+        email: session.customer_email,
+      };
+
+      const participantRecord = await findOrCreateParticipant(participant);
+
+      await supabase.from('race_entries').upsert(
+        {
+          sub_race_id: String(subRaceId),
+          participant_id: participantRecord.id,
+          is_paid: true,
+          payment_amount: convertFromSmallestUnit(session.amount_total, session.currency),
+          payment_currency: String(session.currency || '').toUpperCase(),
+          payment_date: new Date().toISOString(),
+          notes: `Stripe checkout session: ${session.id}`,
+        },
+        { onConflict: 'sub_race_id,participant_id' }
+      );
+      break;
+    }
     case 'payment_intent.payment_failed':
     case 'payment_intent.canceled': {
-      const pi = data.object;
-      await supabaseAdmin
-        .from('payment_intents')
-        .update({ status: pi.status })
-        .eq('stripe_payment_intent_id', pi.id);
       break;
     }
     default:
@@ -51,4 +161,4 @@ async function handleWebhookEvent(event) {
   }
 }
 
-module.exports = { createPaymentIntent, handleWebhookEvent };
+module.exports = { createCheckoutSession, handleWebhookEvent };
