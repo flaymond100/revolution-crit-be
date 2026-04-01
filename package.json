@@ -1,0 +1,40 @@
+{
+  "name": "revolution-crit-be",
+  "version": "1.0.0",
+  "description": "revolution-crit-be",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "nodemon index.js",
+    "test": "jest"
+  },
+  "jest": {
+    "testEnvironment": "node",
+    "testMatch": ["**/tests/**/*.test.js"]
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/flaymond100/revolution-crit-be.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/flaymond100/revolution-crit-be/issues"
+  },
+  "homepage": "https://github.com/flaymond100/revolution-crit-be#readme",
+  "dependencies": {
+    "@supabase/supabase-js": "^2.101.1",
+    "cors": "^2.8.6",
+    "dotenv": "^17.3.1",
+    "express": "^5.2.1",
+    "express-validator": "^7.3.1",
+    "stripe": "^21.0.1"
+  },
+  "devDependencies": {
+    "jest": "^30.3.0",
+    "nodemon": "^3.1.14",
+    "supertest": "^7.2.2"
+  }
+}
