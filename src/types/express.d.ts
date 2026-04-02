@@ -1,10 +1,8 @@
 import type { User } from '@supabase/supabase-js'; // typed
 
-declare global {
-  namespace Express {
-    interface Request {
-      user?: User; // typed — set by authenticate middleware
-    }
+declare module 'express-serve-static-core' {
+  interface Request {
+    user?: User; // typed — set by authenticate middleware
   }
 }
 
