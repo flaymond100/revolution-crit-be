@@ -31,8 +31,32 @@ function convertFromSmallestUnit(amount, currency) {
   return amount / 100;
 }
 
+function normalizeParticipantPayload(participant = {}) {
+  return {
+    fullName: participant.fullName || participant.full_name || null,
+    dateOfBirth: participant.dateOfBirth || participant.date_of_birth || null,
+    gender: participant.gender || null,
+    teamName: participant.teamName || participant.team_name || null,
+    nationality: participant.nationality || null,
+    email: participant.email || null,
+    phone: participant.phone || null,
+  };
+}
+
+function normalizeRegistrationPayload(payload = {}) {
+  return {
+    amount: payload.amount,
+    currency: payload.currency,
+    subRaceId: payload.subRaceId || payload.sub_race_id,
+    participant: normalizeParticipantPayload(payload.participant || {}),
+    successUrl: payload.successUrl || payload.success_url,
+    cancelUrl: payload.cancelUrl || payload.cancel_url,
+  };
+}
+
 async function findOrCreateParticipant(participant) {
-  const email = participant.email || null;
+  const normalizedParticipant = normalizeParticipantPayload(participant);
+  const email = normalizedParticipant.email || null;
 
   if (email) {
     const { data: existingParticipant, error: selectError } = await supabase
@@ -51,13 +75,13 @@ async function findOrCreateParticipant(participant) {
   }
 
   const participantRecord = {
-    full_name: participant.fullName,
-    date_of_birth: participant.dateOfBirth || null,
-    gender: participant.gender || null,
-    team_name: participant.teamName || null,
-    nationality: participant.nationality || null,
+    full_name: normalizedParticipant.fullName,
+    date_of_birth: normalizedParticipant.dateOfBirth,
+    gender: normalizedParticipant.gender,
+    team_name: normalizedParticipant.teamName,
+    nationality: normalizedParticipant.nationality,
     email,
-    phone: participant.phone || null,
+    phone: normalizedParticipant.phone,
   };
 
   const { data: createdParticipant, error: insertError } = await supabase
@@ -77,32 +101,49 @@ async function findOrCreateParticipant(participant) {
  * Create a Stripe Checkout Session for public race registration.
  */
 async function createCheckoutSession({ amount, currency, subRaceId, participant, successUrl, cancelUrl }) {
-  const registrationPayload = {
+  const normalizedInput = normalizeRegistrationPayload({
+    amount,
+    currency,
     subRaceId,
     participant,
+    successUrl,
+    cancelUrl,
+  });
+
+  const registrationPayload = {
+    sub_race_id: normalizedInput.subRaceId,
+    participant: {
+      full_name: normalizedInput.participant.fullName,
+      date_of_birth: normalizedInput.participant.dateOfBirth,
+      gender: normalizedInput.participant.gender,
+      team_name: normalizedInput.participant.teamName,
+      nationality: normalizedInput.participant.nationality,
+      email: normalizedInput.participant.email,
+      phone: normalizedInput.participant.phone,
+    },
   };
 
   const metadata = {
-    sub_race_id: String(subRaceId),
-    participant_email: String(participant.email),
+    sub_race_id: String(normalizedInput.subRaceId),
+    participant_email: String(normalizedInput.participant.email || ''),
     registration_payload: JSON.stringify(registrationPayload),
   };
 
   const session = await stripe.checkout.sessions.create({
     mode: 'payment',
-    success_url: successUrl,
-    cancel_url: cancelUrl,
-    customer_email: participant.email,
+    success_url: normalizedInput.successUrl,
+    cancel_url: normalizedInput.cancelUrl,
+    customer_email: normalizedInput.participant.email,
     metadata,
     payment_intent_data: { metadata },
     line_items: [
       {
         quantity: 1,
         price_data: {
-          currency,
-          unit_amount: amount,
+          currency: normalizedInput.currency,
+          unit_amount: normalizedInput.amount,
           product_data: {
-            name: `Race Registration (${subRaceId})`,
+            name: `Race Registration (${normalizedInput.subRaceId})`,
           },
         },
       },
@@ -131,10 +172,16 @@ async function handleWebhookEvent(event) {
         registrationPayload = {};
       }
 
-      const subRaceId = registrationPayload.subRaceId || session.metadata?.sub_race_id;
-      const participant = registrationPayload.participant || {
-        email: session.customer_email,
-      };
+      const normalizedPayload = normalizeRegistrationPayload({
+        subRaceId: registrationPayload.subRaceId,
+        sub_race_id: registrationPayload.sub_race_id,
+        participant: registrationPayload.participant || {
+          email: session.customer_email,
+        },
+      });
+
+      const subRaceId = normalizedPayload.subRaceId || session.metadata?.sub_race_id;
+      const participant = normalizedPayload.participant;
 
       const participantRecord = await findOrCreateParticipant(participant);
 

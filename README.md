@@ -22,7 +22,7 @@ cp .env.example .env
 
 | Variable | Description |
 |---|---|
-| `PORT` | Port the server listens on (default `3000`) |
+| `PORT` | Port the server listens on (default `3003`) |
 | `NODE_ENV` | `development` or `production` |
 | `ALLOWED_ORIGINS` | Comma-separated list of allowed frontend origins (e.g. `http://localhost:5173`) |
 | `SUPABASE_URL` | Your Supabase project URL |

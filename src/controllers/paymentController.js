@@ -16,7 +16,13 @@ const { createCheckoutSession, handleWebhookEvent } = require('../services/payme
  */
 async function createIntent(req, res) {
   try {
-    const { amount, currency, subRaceId, participant, successUrl, cancelUrl } = req.body;
+    const amount = req.body.amount;
+    const currency = req.body.currency;
+    const subRaceId = req.body.subRaceId || req.body.sub_race_id;
+    const participant = req.body.participant;
+    const successUrl = req.body.successUrl || req.body.success_url;
+    const cancelUrl = req.body.cancelUrl || req.body.cancel_url;
+
     const session = await createCheckoutSession({
       amount,
       currency,

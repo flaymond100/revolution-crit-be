@@ -3,6 +3,7 @@
 const express = require('express');
 const cors = require('cors');
 
+const { handleWebhook } = require('./controllers/paymentController');
 const authRoutes = require('./routes/auth');
 const paymentRoutes = require('./routes/payments');
 
@@ -31,8 +32,12 @@ app.use(
 );
 
 // ---------------------------------------------------------------------------
-// Body parsing (JSON) – the webhook route uses express.raw(), so it must be
-// registered on the router BEFORE this global middleware applies.
+// Stripe webhook (raw body required for signature verification)
+// ---------------------------------------------------------------------------
+app.post('/api/payments/webhook', express.raw({ type: 'application/json' }), handleWebhook);
+
+// ---------------------------------------------------------------------------
+// Body parsing (JSON) for the rest of the API.
 // ---------------------------------------------------------------------------
 app.use(express.json());
 
@@ -40,6 +45,11 @@ app.use(express.json());
 // Health check
 // ---------------------------------------------------------------------------
 app.get('/health', (_req, res) => res.json({ status: 'ok' }));
+
+// ---------------------------------------------------------------------------
+// Public test endpoint
+// ---------------------------------------------------------------------------
+app.get('/test', (_req, res) => res.json({ success: true, message: 'API is reachable' }));
 
 // ---------------------------------------------------------------------------
 // API Routes
