@@ -1,10 +1,8 @@
-'use strict';
+import express, { Router } from 'express'; // typed
+import { createIntent } from '../controllers/paymentController';
+import { validate, body } from '../middleware/validate';
 
-const express = require('express');
-const { createIntent } = require('../controllers/paymentController');
-const { validate, body } = require('../middleware/validate');
-
-const router = express.Router();
+const router: Router = express.Router(); // typed
 
 const createIntentRules = [
   body('amount').isInt({ min: 1 }).withMessage('amount must be a positive integer (smallest currency unit)'),
@@ -60,4 +58,4 @@ const createIntentRules = [
 // Public route for race registration checkout
 router.post('/create-payment-intent', validate(createIntentRules), createIntent);
 
-module.exports = router;
+export default router; // typed

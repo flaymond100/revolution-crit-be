@@ -1,8 +1,6 @@
-'use strict';
+import 'dotenv/config'; // typed — replaces require('dotenv').config() with ESM-style side-effect import
 
-require('dotenv').config();
-
-const app = require('./src/app');
+import app from './src/app';
 
 const PORT = process.env.PORT || 3003;
 

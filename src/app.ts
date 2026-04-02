@@ -1,13 +1,11 @@
-'use strict';
+import express, { Application, Request, Response, NextFunction } from 'express'; // typed
+import cors from 'cors';
 
-const express = require('express');
-const cors = require('cors');
+import { handleWebhook } from './controllers/paymentController';
+import authRoutes from './routes/auth';
+import paymentRoutes from './routes/payments';
 
-const { handleWebhook } = require('./controllers/paymentController');
-const authRoutes = require('./routes/auth');
-const paymentRoutes = require('./routes/payments');
-
-const app = express();
+const app: Application = express(); // typed
 
 // ---------------------------------------------------------------------------
 // CORS
@@ -19,7 +17,7 @@ const allowedOrigins = (process.env.ALLOWED_ORIGINS || '')
 
 app.use(
   cors({
-    origin(origin, callback) {
+    origin(origin, callback) { // typed — inferred as CustomOrigin by @types/cors
       // Allow requests with no origin (e.g. server-to-server, curl)
       if (!origin) return callback(null, true);
       if (allowedOrigins.length === 0 || allowedOrigins.includes(origin)) {
@@ -44,12 +42,12 @@ app.use(express.json());
 // ---------------------------------------------------------------------------
 // Health check
 // ---------------------------------------------------------------------------
-app.get('/health', (_req, res) => res.json({ status: 'ok' }));
+app.get('/health', (_req: Request, res: Response) => res.json({ status: 'ok' })); // typed
 
 // ---------------------------------------------------------------------------
 // Public test endpoint
 // ---------------------------------------------------------------------------
-app.get('/test', (_req, res) => res.json({ success: true, message: 'API is reachable' }));
+app.get('/test', (_req: Request, res: Response) => res.json({ success: true, message: 'API is reachable' })); // typed
 
 // ---------------------------------------------------------------------------
 // API Routes
@@ -60,15 +58,20 @@ app.use('/api/payments', paymentRoutes);
 // ---------------------------------------------------------------------------
 // 404 fallback
 // ---------------------------------------------------------------------------
-app.use((_req, res) => res.status(404).json({ error: 'Route not found' }));
+app.use((_req: Request, res: Response) => res.status(404).json({ error: 'Route not found' })); // typed
 
 // ---------------------------------------------------------------------------
 // Global error handler
 // ---------------------------------------------------------------------------
+
+interface AppError extends Error { // typed — shape expected by all Express error-throwing code in this project
+  status?: number;
+}
+
 // eslint-disable-next-line no-unused-vars
-app.use((err, _req, res, _next) => {
+app.use((err: AppError, _req: Request, res: Response, _next: NextFunction): void => { // typed
   console.error(err);
   res.status(err.status || 500).json({ error: err.message || 'Internal Server Error' });
 });
 
-module.exports = app;
+export default app; // typed

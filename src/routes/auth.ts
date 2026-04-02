@@ -1,11 +1,9 @@
-'use strict';
+import express, { Router } from 'express'; // typed
+import { register, login, logout, me } from '../controllers/authController';
+import { authenticate } from '../middleware/authenticate';
+import { validate, body } from '../middleware/validate';
 
-const express = require('express');
-const { register, login, logout, me } = require('../controllers/authController');
-const { authenticate } = require('../middleware/authenticate');
-const { validate, body } = require('../middleware/validate');
-
-const router = express.Router();
+const router: Router = express.Router(); // typed
 
 const emailPasswordRules = [
   body('email').isEmail().withMessage('A valid email is required').normalizeEmail(),
@@ -17,4 +15,4 @@ router.post('/login', validate(emailPasswordRules), login);
 router.post('/logout', logout);
 router.get('/me', authenticate, me);
 
-module.exports = router;
+export default router; // typed

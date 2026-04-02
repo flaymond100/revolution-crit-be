@@ -1,6 +1,4 @@
-'use strict';
-
-const { createClient } = require('@supabase/supabase-js');
+import { createClient, SupabaseClient } from '@supabase/supabase-js'; // typed
 
 const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseAnonKey = process.env.SUPABASE_ANON_KEY;
@@ -10,6 +8,6 @@ if (!supabaseUrl || !supabaseAnonKey) {
 }
 
 // Public client - uses anon key and respects Row Level Security
-const supabase = createClient(supabaseUrl, supabaseAnonKey);
+const supabase: SupabaseClient = createClient(supabaseUrl, supabaseAnonKey); // typed
 
-module.exports = { supabase };
+export { supabase }; // typed
