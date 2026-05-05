@@ -1,6 +1,6 @@
 import Stripe from 'stripe'; // typed
 import stripe from '../config/stripe';
-import { supabase } from '../config/supabase';
+import { supabase, supabaseService } from '../config/supabase';
 
 // ---------------------------------------------------------------------------
 // Interfaces
@@ -57,8 +57,6 @@ interface ParticipantRecord { // typed — shape of selected columns from 'parti
 }
 
 export interface CreateCheckoutSessionParams { // typed
-  amount: number;
-  currency: string;
   subRaceId?: string;
   participant: ParticipantInput;
   successUrl?: string;
@@ -127,12 +125,29 @@ function normalizeRegistrationPayload(payload: RegistrationInput = {}): Normaliz
   };
 }
 
+async function resolveActivePriceCents(subRaceId: string): Promise<number> {
+  const now = new Date().toISOString();
+  const { data, error } = await supabase
+    .from('race_sub_race_prices')
+    .select('amount_cents, valid_from, valid_until')
+    .eq('sub_race_id', subRaceId)
+    .lte('valid_from', now)
+    .or(`valid_until.is.null,valid_until.gt.${now}`)
+    .order('valid_from', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) throw error;
+  if (!data) throw new Error(`No active price configured for starting class ${subRaceId}`);
+  return data.amount_cents as number;
+}
+
 async function findOrCreateParticipant(participant: ParticipantInput): Promise<ParticipantRecord> { // typed
   const normalizedParticipant = normalizeParticipantPayload(participant);
   const email = normalizedParticipant.email || null;
 
   if (email) {
-    const { data: existingParticipant, error: selectError } = await supabase
+    const { data: existingParticipant, error: selectError } = await supabaseService
       .from('participants')
       .select('id, full_name, email')
       .eq('email', email)
@@ -157,7 +172,7 @@ async function findOrCreateParticipant(participant: ParticipantInput): Promise<P
     phone: normalizedParticipant.phone,
   };
 
-  const { data: createdParticipant, error: insertError } = await supabase
+  const { data: createdParticipant, error: insertError } = await supabaseService
     .from('participants')
     .insert(participantRecord)
     .select('id, full_name, email')
@@ -176,23 +191,26 @@ async function findOrCreateParticipant(participant: ParticipantInput): Promise<P
 
 /**
  * Create a Stripe Checkout Session for public race registration.
+ * Amount is authoritative from the DB — never trusted from the client.
  */
 async function createCheckoutSession({
-  amount,
-  currency,
   subRaceId,
   participant,
   successUrl,
   cancelUrl,
-}: CreateCheckoutSessionParams): Promise<Stripe.Checkout.Session> { // typed
+}: CreateCheckoutSessionParams): Promise<Stripe.Checkout.Session> {
   const normalizedInput = normalizeRegistrationPayload({
-    amount,
-    currency,
     subRaceId,
     participant,
     successUrl,
     cancelUrl,
   });
+
+  if (!normalizedInput.subRaceId) {
+    throw new Error('subRaceId is required');
+  }
+
+  const amountCents = await resolveActivePriceCents(normalizedInput.subRaceId);
 
   const registrationPayload = {
     sub_race_id: normalizedInput.subRaceId,
@@ -207,8 +225,8 @@ async function createCheckoutSession({
     },
   };
 
-  const metadata: Stripe.MetadataParam = { // typed
-    sub_race_id: String(normalizedInput.subRaceId),
+  const metadata: Stripe.MetadataParam = {
+    sub_race_id: normalizedInput.subRaceId,
     participant_email: String(normalizedInput.participant.email || ''),
     registration_payload: JSON.stringify(registrationPayload),
   };
@@ -217,15 +235,15 @@ async function createCheckoutSession({
     mode: 'payment',
     success_url: normalizedInput.successUrl,
     cancel_url: normalizedInput.cancelUrl,
-    customer_email: normalizedInput.participant.email ?? undefined, // typed — Stripe expects string | undefined, not null
+    customer_email: normalizedInput.participant.email ?? undefined,
     metadata,
     payment_intent_data: { metadata },
     line_items: [
       {
         quantity: 1,
         price_data: {
-          currency: normalizedInput.currency ?? '', // typed — normalised currency is string | undefined; empty string will be rejected by Stripe at runtime
-          unit_amount: normalizedInput.amount,
+          currency: 'eur',
+          unit_amount: amountCents,
           product_data: {
             name: `Race Registration (${normalizedInput.subRaceId})`,
           },
@@ -273,7 +291,7 @@ async function handleWebhookEvent(event: Stripe.Event): Promise<void> { // typed
       // so the cast is safe at runtime.
       const participantRecord = await findOrCreateParticipant(participant as ParticipantInput);
 
-      await supabase.from('race_entries').upsert(
+      await supabaseService.from('race_entries').upsert(
         {
           sub_race_id: String(subRaceId),
           participant_id: participantRecord.id,

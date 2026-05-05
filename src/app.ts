@@ -15,19 +15,25 @@ const allowedOrigins = (process.env.ALLOWED_ORIGINS || '')
   .map((o) => o.trim())
   .filter(Boolean);
 
-app.use(
-  cors({
-    origin(origin, callback) { // typed — inferred as CustomOrigin by @types/cors
-      // Allow requests with no origin (e.g. server-to-server, curl)
-      if (!origin) return callback(null, true);
-      if (allowedOrigins.length === 0 || allowedOrigins.includes(origin)) {
-        return callback(null, true);
-      }
-      callback(new Error(`CORS policy: origin ${origin} not allowed`));
-    },
-    credentials: true,
-  })
-);
+const isDev = process.env.NODE_ENV !== 'production';
+
+const corsOptions: cors.CorsOptions = {
+  origin(origin, callback) {
+    if (!origin) return callback(null, true);
+    if (isDev && /^https?:\/\/localhost(:\d+)?$/.test(origin)) {
+      return callback(null, true);
+    }
+    if (allowedOrigins.length === 0 || allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    }
+    callback(new Error(`CORS policy: origin ${origin} not allowed`));
+  },
+  credentials: true,
+};
+
+// Handle preflight OPTIONS requests explicitly before all routes
+app.options('*', cors(corsOptions));
+app.use(cors(corsOptions));
 
 // ---------------------------------------------------------------------------
 // Stripe webhook (raw body required for signature verification)

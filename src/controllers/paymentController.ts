@@ -36,8 +36,6 @@ interface Participant { // typed
  * }
  */
 interface CreateIntentBody { // typed
-  amount: number;
-  currency: string;
   subRaceId?: string;
   sub_race_id?: string;
   participant: Participant;
@@ -56,16 +54,12 @@ async function createIntent(
   res: Response // typed
 ): Promise<void> { // typed
   try {
-    const amount = req.body.amount;
-    const currency = req.body.currency;
     const subRaceId = req.body.subRaceId || req.body.sub_race_id;
     const participant = req.body.participant;
     const successUrl = req.body.successUrl || req.body.success_url;
     const cancelUrl = req.body.cancelUrl || req.body.cancel_url;
 
     const session = await createCheckoutSession({
-      amount,
-      currency,
       subRaceId,
       participant,
       successUrl,
