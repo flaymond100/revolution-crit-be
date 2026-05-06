@@ -142,17 +142,35 @@ async function resolveActivePriceCents(subRaceId: string): Promise<number> {
   return data.amount_cents as number;
 }
 
-async function createParticipant(participant: ParticipantInput): Promise<ParticipantRecord> {
-  const normalizedParticipant = normalizeParticipantPayload(participant);
+async function findOrCreateParticipant(participant: ParticipantInput): Promise<ParticipantRecord> {
+  const normalized = normalizeParticipantPayload(participant);
+  const email = normalized.email?.trim().toLowerCase() || null;
+  const fullName = normalized.fullName?.trim() || null;
+  const dateOfBirth = normalized.dateOfBirth || null;
+
+  // Dedup only when all three identity fields are present
+  if (email && fullName && dateOfBirth) {
+    const { data: existing, error: selectError } = await supabaseService
+      .from('participants')
+      .select('id, full_name, email')
+      .eq('email', email)
+      .eq('full_name', fullName)
+      .eq('date_of_birth', dateOfBirth)
+      .limit(1)
+      .maybeSingle();
+
+    if (selectError) throw selectError;
+    if (existing) return existing as ParticipantRecord;
+  }
 
   const participantRecord = {
-    full_name: normalizedParticipant.fullName,
-    date_of_birth: normalizedParticipant.dateOfBirth,
-    gender: normalizedParticipant.gender,
-    team_name: normalizedParticipant.teamName,
-    nationality: normalizedParticipant.nationality,
-    email: normalizedParticipant.email || null,
-    phone: normalizedParticipant.phone,
+    full_name: fullName,
+    date_of_birth: dateOfBirth,
+    gender: normalized.gender,
+    team_name: normalized.teamName,
+    nationality: normalized.nationality,
+    email,
+    phone: normalized.phone,
   };
 
   const { data: createdParticipant, error: insertError } = await supabaseService
@@ -272,7 +290,7 @@ async function handleWebhookEvent(event: Stripe.Event): Promise<void> { // typed
       // typed — NormalizedParticipant uses `null` for missing values; ParticipantInput uses `undefined`.
       // normalizeParticipantPayload (called inside findOrCreateParticipant) handles both via `|| null`,
       // so the cast is safe at runtime.
-      const participantRecord = await createParticipant(participant as ParticipantInput);
+      const participantRecord = await findOrCreateParticipant(participant as ParticipantInput);
 
       const { error: upsertError } = await supabaseService.from('race_entries').upsert(
         {
