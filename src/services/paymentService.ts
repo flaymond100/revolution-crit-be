@@ -142,25 +142,8 @@ async function resolveActivePriceCents(subRaceId: string): Promise<number> {
   return data.amount_cents as number;
 }
 
-async function findOrCreateParticipant(participant: ParticipantInput): Promise<ParticipantRecord> { // typed
+async function createParticipant(participant: ParticipantInput): Promise<ParticipantRecord> {
   const normalizedParticipant = normalizeParticipantPayload(participant);
-  const email = normalizedParticipant.email || null;
-
-  if (email) {
-    const { data: existingParticipant, error: selectError } = await supabaseService
-      .from('participants')
-      .select('id, full_name, email')
-      .eq('email', email)
-      .maybeSingle();
-
-    if (selectError) {
-      throw selectError;
-    }
-
-    if (existingParticipant) {
-      return existingParticipant as ParticipantRecord; // typed — cast untyped Supabase response to known shape
-    }
-  }
 
   const participantRecord = {
     full_name: normalizedParticipant.fullName,
@@ -168,7 +151,7 @@ async function findOrCreateParticipant(participant: ParticipantInput): Promise<P
     gender: normalizedParticipant.gender,
     team_name: normalizedParticipant.teamName,
     nationality: normalizedParticipant.nationality,
-    email,
+    email: normalizedParticipant.email || null,
     phone: normalizedParticipant.phone,
   };
 
@@ -182,7 +165,7 @@ async function findOrCreateParticipant(participant: ParticipantInput): Promise<P
     throw insertError;
   }
 
-  return createdParticipant as ParticipantRecord; // typed — cast untyped Supabase response to known shape
+  return createdParticipant as ParticipantRecord;
 }
 
 // ---------------------------------------------------------------------------
@@ -289,9 +272,9 @@ async function handleWebhookEvent(event: Stripe.Event): Promise<void> { // typed
       // typed — NormalizedParticipant uses `null` for missing values; ParticipantInput uses `undefined`.
       // normalizeParticipantPayload (called inside findOrCreateParticipant) handles both via `|| null`,
       // so the cast is safe at runtime.
-      const participantRecord = await findOrCreateParticipant(participant as ParticipantInput);
+      const participantRecord = await createParticipant(participant as ParticipantInput);
 
-      await supabaseService.from('race_entries').upsert(
+      const { error: upsertError } = await supabaseService.from('race_entries').upsert(
         {
           sub_race_id: String(subRaceId),
           participant_id: participantRecord.id,
@@ -303,6 +286,11 @@ async function handleWebhookEvent(event: Stripe.Event): Promise<void> { // typed
         },
         { onConflict: 'sub_race_id,participant_id' }
       );
+      if (upsertError) {
+        console.error('Failed to upsert race_entry:', upsertError, { subRaceId, participantId: participantRecord.id });
+        throw upsertError;
+      }
+      console.log('race_entry upserted successfully', { subRaceId, participantId: participantRecord.id });
       break;
     }
     case 'payment_intent.payment_failed':

@@ -31,8 +31,6 @@ const corsOptions: cors.CorsOptions = {
   credentials: true,
 };
 
-// Handle preflight OPTIONS requests explicitly before all routes
-app.options('*', cors(corsOptions));
 app.use(cors(corsOptions));
 
 // ---------------------------------------------------------------------------
