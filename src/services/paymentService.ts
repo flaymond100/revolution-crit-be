@@ -291,8 +291,7 @@ async function createCheckoutSession({
           currency: 'eur',
           unit_amount: amountCents,
           product_data: {
-            name: `${raceName} — ${categoryLabel}`,
-            description: formatRaceDate(raceDate),
+            name: `${raceName} (${formatRaceDate(raceDate)}), ${categoryLabel}`          
           },
         },
       },
