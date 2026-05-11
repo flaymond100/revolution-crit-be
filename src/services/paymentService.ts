@@ -142,6 +142,50 @@ async function resolveActivePriceCents(subRaceId: string): Promise<number> {
   return data.amount_cents as number;
 }
 
+async function getSubRaceContext(subRaceId: string): Promise<{
+  raceName: string;
+  raceDate: string;
+  categoryLabel: string;
+}> {
+  const { data: subRace, error: subRaceError } = await supabase
+    .from('race_sub_races')
+    .select('name, race_calendar_id')
+    .eq('id', subRaceId)
+    .single();
+
+  if (subRaceError || !subRace) {
+    throw new Error(`Sub-race ${subRaceId} not found`);
+  }
+
+  const { data: race, error: raceError } = await supabase
+    .from('race_calendar')
+    .select('name, race_date')
+    .eq('id', subRace.race_calendar_id)
+    .single();
+
+  if (raceError || !race) {
+    throw new Error(`Race ${subRace.race_calendar_id} not found`);
+  }
+
+  const { data: category } = await supabase
+    .from('race_categories')
+    .select('label')
+    .eq('id', subRace.name)
+    .maybeSingle();
+
+  return {
+    raceName: race.name as string,
+    raceDate: race.race_date as string,
+    categoryLabel: (category?.label as string | undefined) ?? (subRace.name as string),
+  };
+}
+
+function formatRaceDate(isoDate: string): string {
+  const d = new Date(isoDate);
+  if (Number.isNaN(d.getTime())) return isoDate;
+  return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+}
+
 async function findOrCreateParticipant(participant: ParticipantInput): Promise<ParticipantRecord> {
   const normalized = normalizeParticipantPayload(participant);
   const email = normalized.email?.trim().toLowerCase() || null;
@@ -212,6 +256,7 @@ async function createCheckoutSession({
   }
 
   const amountCents = await resolveActivePriceCents(normalizedInput.subRaceId);
+  const { raceName, raceDate, categoryLabel } = await getSubRaceContext(normalizedInput.subRaceId);
 
   const registrationPayload = {
     sub_race_id: normalizedInput.subRaceId,
@@ -246,7 +291,8 @@ async function createCheckoutSession({
           currency: 'eur',
           unit_amount: amountCents,
           product_data: {
-            name: `Race Registration (${normalizedInput.subRaceId})`,
+            name: `${raceName} — ${categoryLabel}`,
+            description: formatRaceDate(raceDate),
           },
         },
       },
