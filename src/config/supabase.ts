@@ -8,12 +8,6 @@ if (!supabaseUrl || !supabaseAnonKey) {
   throw new Error('Missing required Supabase environment variables: SUPABASE_URL, SUPABASE_ANON_KEY');
 }
 
-console.log(
-  'Supabase config:',
-  supabaseServiceKey
-    ? '✓ service role key loaded (server writes will bypass RLS)'
-    : '⚠ service role key MISSING — falling back to anon key (writes will fail RLS)'
-);
 
 // Public client — respects Row Level Security
 const supabase: SupabaseClient = createClient(supabaseUrl, supabaseAnonKey);
