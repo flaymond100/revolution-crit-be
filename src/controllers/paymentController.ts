@@ -22,6 +22,8 @@ interface Participant { // typed
   nationality?: string;
   email?: string;
   phone?: string;
+  uciNumber?: string;
+  uci_number?: string;
 }
 
 /**

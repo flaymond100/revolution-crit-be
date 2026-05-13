@@ -17,6 +17,8 @@ interface ParticipantInput { // typed
   nationality?: string;
   email?: string;
   phone?: string;
+  uciNumber?: string;
+  uci_number?: string;
 }
 
 interface NormalizedParticipant { // typed
@@ -27,6 +29,7 @@ interface NormalizedParticipant { // typed
   nationality: string | null;
   email: string | null;
   phone: string | null;
+  uciNumber: string | null;
 }
 
 interface RegistrationInput { // typed
@@ -111,6 +114,7 @@ function normalizeParticipantPayload(participant: ParticipantInput = {}): Normal
     nationality: participant.nationality || null,
     email: participant.email || null,
     phone: participant.phone || null,
+    uciNumber: participant.uciNumber || participant.uci_number || null,
   };
 }
 
@@ -215,6 +219,7 @@ async function findOrCreateParticipant(participant: ParticipantInput): Promise<P
     nationality: normalized.nationality,
     email,
     phone: normalized.phone,
+    uci_number: normalized.uciNumber,
   };
 
   const { data: createdParticipant, error: insertError } = await supabaseService
