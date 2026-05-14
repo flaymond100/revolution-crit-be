@@ -289,6 +289,12 @@ async function createCheckoutSession({
     customer_email: normalizedInput.participant.email ?? undefined,
     metadata,
     payment_intent_data: { metadata },
+    invoice_creation: {
+      enabled: true,
+      invoice_data: {
+        description: `Race registration — ${raceName} (${categoryLabel})`,
+      },
+    },
     line_items: [
       {
         quantity: 1,
