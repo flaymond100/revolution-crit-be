@@ -284,6 +284,7 @@ async function createCheckoutSession({
 
   const session = await stripe.checkout.sessions.create({
     mode: 'payment',
+    allow_promotion_codes: true,
     success_url: normalizedInput.successUrl,
     cancel_url: normalizedInput.cancelUrl,
     customer_email: normalizedInput.participant.email ?? undefined,
