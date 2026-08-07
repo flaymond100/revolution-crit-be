@@ -2,6 +2,16 @@ import Stripe from 'stripe'; // typed
 import stripe from '../config/stripe';
 import { supabase, supabaseService } from '../config/supabase';
 
+// Thrown when a checkout session is requested for a race whose internal
+// (Stripe) registration has been closed/disabled — mapped to HTTP 403 by
+// the controller.
+export class RegistrationClosedError extends Error {
+  constructor(message = 'Registration is closed for this race') {
+    super(message);
+    this.name = 'RegistrationClosedError';
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Interfaces
 // ---------------------------------------------------------------------------
@@ -163,12 +173,16 @@ async function getSubRaceContext(subRaceId: string): Promise<{
 
   const { data: race, error: raceError } = await supabase
     .from('race_calendar')
-    .select('name, race_date')
+    .select('name, race_date, internal_registration')
     .eq('id', subRace.race_calendar_id)
     .single();
 
   if (raceError || !race) {
     throw new Error(`Race ${subRace.race_calendar_id} not found`);
+  }
+
+  if (!race.internal_registration) {
+    throw new RegistrationClosedError();
   }
 
   const { data: category } = await supabase
@@ -260,8 +274,8 @@ async function createCheckoutSession({
     throw new Error('subRaceId is required');
   }
 
-  const amountCents = await resolveActivePriceCents(normalizedInput.subRaceId);
   const { raceName, raceDate, categoryLabel } = await getSubRaceContext(normalizedInput.subRaceId);
+  const amountCents = await resolveActivePriceCents(normalizedInput.subRaceId);
 
   const registrationPayload = {
     sub_race_id: normalizedInput.subRaceId,

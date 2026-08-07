@@ -3,7 +3,11 @@ import Stripe from 'stripe'; // typed
 
 // TODO: paymentService.js is not yet migrated — createCheckoutSession / handleWebhookEvent
 // are inferred from JS. Tighten return types when paymentService is migrated.
-import { createCheckoutSession, handleWebhookEvent } from '../services/paymentService';
+import {
+  createCheckoutSession,
+  handleWebhookEvent,
+  RegistrationClosedError,
+} from '../services/paymentService';
 
 import stripe from '../config/stripe'; // typed — Stripe instance (CJS default export)
 
@@ -70,6 +74,11 @@ async function createIntent(
 
     res.status(201).json({ checkoutUrl: session.url, sessionId: session.id });
   } catch (err) {
+    if (err instanceof RegistrationClosedError) {
+      res.status(403).json({ error: err.message });
+      return;
+    }
+
     console.error('Error creating checkout session:', (err as Error).message); // typed
     res.status(500).json({ error: 'Failed to create checkout session' });
   }
