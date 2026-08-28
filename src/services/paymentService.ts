@@ -287,6 +287,7 @@ async function createCheckoutSession({
       nationality: normalizedInput.participant.nationality,
       email: normalizedInput.participant.email,
       phone: normalizedInput.participant.phone,
+      uci_number: normalizedInput.participant.uciNumber,
     },
   };
 
